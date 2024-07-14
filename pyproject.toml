@@ -1,0 +1,6 @@
+[tool.pyright]
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+pythonpath = "src"
+testpaths = "tests"

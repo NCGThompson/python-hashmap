@@ -1,0 +1,6 @@
+# There are no external dependencies for the code itself.
+# These are linters, etc.
+
+pytest
+pyright
+ruff
