@@ -1,5 +1,5 @@
-from typing import Self
 from collections.abc import Hashable, MutableMapping
+from typing import Iterator, Self
 
 
 class _SimpleRecord[_KeyType: Hashable, _ValueType]:
@@ -51,40 +51,46 @@ class SimpleHashmap[_KeyType: Hashable, _ValueType](
         self._count = 0
 
     def __getitem__(self, key: _KeyType) -> _ValueType:
-        rec = self._find(key)
-        if rec[0] is None:
+        rec, _ = self._find(key)
+        if rec is None:
             raise KeyError
-        return rec[0].value
+        return rec.value
 
     def __setitem__(self, key: _KeyType, value: _ValueType) -> None:
-        rec = self._find(key)
+        rec, p = self._find(key)
 
-        if rec[0] is not None:
-            rec[0].value = value
+        if rec is not None:
+            rec.value = value
             return
 
-        assert isinstance(rec[1], int)
+        assert isinstance(p, int)
 
         node = _SimpleRecord[_KeyType, _ValueType](key, value)
-        node.next_collision = self._map[rec[1]]
-        self._map[rec[1]] = node
+        node.next_collision = self._map[p]
+        self._map[p] = node
 
         self._count += 1
 
     def __delitem__(self, key: _KeyType) -> None:
-        rec = self._find(key)
-        if rec[0] is None:
+        rec, p = self._find(key)
+        if rec is None:
             # Should we error or return?
             return
-        if isinstance(rec[1], _SimpleRecord):
-            rec[1].next_collision = rec[0].next_collision
+        if isinstance(p, _SimpleRecord):
+            p.next_collision = rec.next_collision
         else:
-            self._map[rec[1]] = rec[0].next_collision
+            self._map[p] = rec.next_collision
 
         self._count -= 1
 
     def __len__(self) -> int:
         return self._count
+
+    def __iter__(self) -> Iterator[_KeyType]:
+        for node in self._map:
+            while node is not None:
+                yield node.key
+                node = node.next_collision
 
     def _find(
         self, key: _KeyType

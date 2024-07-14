@@ -1,13 +1,14 @@
 from itertools import pairwise
 
+import fancy_map as fm
 import pytest
-import simple_map as hm
+import simple_map as sm
 
 
 def test_simple_record_init():
     key = "This is a key!"
     value = "This is a value!"
-    rec = hm._SimpleRecord(key, value)
+    rec = sm._SimpleRecord(key, value)
 
     assert rec.key is key
     assert rec.value is value
@@ -17,14 +18,14 @@ def test_simple_record_init():
 def test_simple_record_find():
     key = "This is a key!"
     value = "This is a value!"
-    rec_1 = hm._SimpleRecord(key, value)
+    rec_1 = sm._SimpleRecord(key, value)
 
     res = rec_1.find("Hello!")
     assert res is None
     res = rec_1.find(key)
     assert res == (rec_1, None)
 
-    rec_2 = hm._SimpleRecord(value, key)
+    rec_2 = sm._SimpleRecord(value, key)
     rec_1.next_collision = rec_2
 
     res = rec_1.find("Hello!")
@@ -35,10 +36,9 @@ def test_simple_record_find():
     assert res == (rec_2, rec_1)
 
 
-def test_simple_hashmap():
+def t_hashmap(m: sm.SimpleHashmap[str, str]):
     test_data = list(pairwise("abcdefghijklmnopqrstuvwxyz"))
 
-    m = hm.SimpleHashmap[str, str](5)
     assert m._count == 0
     assert m._map == [None, None, None, None, None]
 
@@ -46,9 +46,14 @@ def test_simple_hashmap():
         m[i] = v
 
     assert len(m) == 25
+    li = list(m)
+    assert len(li) == 25
 
     for i, v in test_data:
         assert m[i] == v
+        assert i in li
+    if isinstance(m, fm.FancyHashmap):
+        assert li == [x[0] for x in test_data]
 
     m["y"] = "a"
     assert m["y"] == "a"
@@ -68,3 +73,11 @@ def test_simple_hashmap():
         del m[i]
     assert len(m) == 0
     assert m._map == [None, None, None, None, None]
+
+
+def test_simple_hashmap():
+    t_hashmap(sm.SimpleHashmap[str, str](5))
+
+
+def test_fancy_hashmap():
+    t_hashmap(fm.FancyHashmap(5))
