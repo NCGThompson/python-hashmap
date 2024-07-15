@@ -12,7 +12,7 @@ class _SimpleRecord[_KeyType: Hashable, _ValueType]:
         self.value = value
         self.next_collision = None
 
-    def find(self, key: _KeyType) -> tuple[Self, Self | None] | None:
+    def find(self, key: Hashable) -> tuple[Self, Self | None] | None:
         """
         Return this object or the first collided node that matches the key.
 
@@ -41,9 +41,7 @@ class SimpleHashmap[_KeyType: Hashable, _ValueType](
     _map: list[_SimpleRecord[_KeyType, _ValueType] | None]
     _count: int
 
-    def __init__(self, size: int | None = None) -> None:
-        if size is None:
-            raise TypeError
+    def __init__(self, size: int) -> None:
         if size <= 1:
             raise ValueError
 
@@ -74,8 +72,7 @@ class SimpleHashmap[_KeyType: Hashable, _ValueType](
     def __delitem__(self, key: _KeyType) -> None:
         rec, p = self._find(key)
         if rec is None:
-            # Should we error or return?
-            return
+            raise KeyError
         if isinstance(p, _SimpleRecord):
             p.next_collision = rec.next_collision
         else:
@@ -93,7 +90,7 @@ class SimpleHashmap[_KeyType: Hashable, _ValueType](
                 node = node.next_collision
 
     def _find(
-        self, key: _KeyType
+        self, key: Hashable
     ) -> tuple[
         _SimpleRecord[_KeyType, _ValueType] | None,
         _SimpleRecord[_KeyType, _ValueType] | int,

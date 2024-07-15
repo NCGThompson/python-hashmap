@@ -1,6 +1,7 @@
 import weakref
 from collections.abc import Hashable
-from typing import Iterator, Self, SupportsIndex
+from copy import deepcopy
+from typing import Iterator, Reversible, Self, SupportsIndex
 
 from simple_map import SimpleHashmap, _SimpleRecord
 
@@ -16,7 +17,9 @@ class _FancyRecord[_KeyType: Hashable, _ValueType](_SimpleRecord[_KeyType, _Valu
         self.prev_ordered = None
 
 
-class FancyHashmap[_KeyType: Hashable, _ValueType](SimpleHashmap[_KeyType, _ValueType]):
+class FancyHashmap[_KeyType: Hashable, _ValueType](
+    SimpleHashmap[_KeyType, _ValueType], Reversible[_KeyType]
+):
     _head: _FancyRecord[_KeyType, _ValueType] | None
     _tail: _FancyRecord[_KeyType, _ValueType] | None
     _array: list[weakref.ref[_FancyRecord[_KeyType, _ValueType]]]
@@ -27,6 +30,11 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](SimpleHashmap[_KeyType, _Valu
         self._head = None
         self._tail = None
         self._array = []
+
+    def __contains__(self, key: object) -> bool:
+        if not isinstance(key, Hashable):
+            return False
+        return bool(isinstance(key, Hashable) and self._find(key)[0])
 
     def __setitem__(self, key: _KeyType, value: _ValueType) -> None:
         rec, p = self._find(key)
@@ -64,8 +72,7 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](SimpleHashmap[_KeyType, _Valu
     def __delitem__(self, key: _KeyType) -> None:
         rec, p = self._find(key)
         if rec is None:
-            # FIXME: Should we error or return?
-            return
+            raise KeyError
 
         # Remove from hashmap
         if isinstance(p, _SimpleRecord):
@@ -96,11 +103,56 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](SimpleHashmap[_KeyType, _Valu
 
         self._count -= 1
 
+    def clear(self) -> None:
+        self._map.clear()
+        self._array.clear()
+        self._count = 0
+        self._head = None
+        self._tail = None
+
+    def popitem(self, last: bool = True) -> tuple[_KeyType, _ValueType]:
+        # Uses same signature as OrderedDict
+        if self._count <= 0:
+            raise KeyError
+
+        if last:
+            rec = self._tail
+        else:
+            rec = self._head
+        assert rec is not None
+        key, value = rec.key, rec.value
+
+        del self[key]
+        return (key, value)
+
     def __iter__(self) -> Iterator[_KeyType]:
         node = self._head
         while node is not None:
             yield node.key
             node = node.next_ordered
+
+    def __reversed__(self) -> Iterator[_KeyType]:
+        node = self._tail
+        while node is not None:
+            yield node.key
+            node = node.prev_ordered
+
+    def __deepcopy__(self, memo):
+        new = object.__new__(type(self))
+        memo[id(self)] = new
+        new.__dict__.update(deepcopy(self.__dict__, memo))
+
+        new_arr = []
+        node = new._head
+        i = 0
+        while node is not None:
+            new_arr.append(weakref.ref(node))
+            node.l_index = i
+            node = node.next_ordered
+            i += 1
+
+        new._array = new_arr
+        return new
 
     def iat(self, index: SupportsIndex) -> tuple[_KeyType, _ValueType]:
         """Select a key value pair from a given integer.
@@ -115,7 +167,7 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](SimpleHashmap[_KeyType, _Valu
         return (rec.key, rec.value)
 
     def _find(
-        self, key: _KeyType
+        self, key: Hashable
     ) -> tuple[
         _FancyRecord[_KeyType, _ValueType] | None,
         _FancyRecord[_KeyType, _ValueType] | int,
