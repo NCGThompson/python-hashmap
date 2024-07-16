@@ -1,7 +1,8 @@
 import weakref
-from collections.abc import Hashable
+from collections.abc import Hashable, Iterator, Reversible
 from copy import deepcopy
-from typing import Iterator, Reversible, Self, SupportsIndex
+from numbers import Real
+from typing import Literal, Self, SupportsIndex
 
 from simple_map import SimpleHashmap, _SimpleRecord
 
@@ -20,6 +21,9 @@ class _FancyRecord[_KeyType: Hashable, _ValueType](_SimpleRecord[_KeyType, _Valu
 class FancyHashmap[_KeyType: Hashable, _ValueType](
     SimpleHashmap[_KeyType, _ValueType], Reversible[_KeyType]
 ):
+    highwater: float | Real | None | Literal[False]
+    lowwater: float | Real | None
+
     _head: _FancyRecord[_KeyType, _ValueType] | None
     _tail: _FancyRecord[_KeyType, _ValueType] | None
     _array: list[weakref.ref[_FancyRecord[_KeyType, _ValueType]]]
@@ -31,10 +35,54 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
         self._tail = None
         self._array = []
 
+        self.highwater = 0.9
+        # low
+
+    def copy_with_size(self, size: int | None = None) -> None:
+        if size is None:
+            size = (
+                2 << self._count.bit_length()
+            )  # The two there instead of one is intentional
+        if size <= 0:
+            raise ValueError
+
+    def resize(self, size: int | None = None) -> None:
+        if size is None:
+            size = (
+                2 << self._count.bit_length()
+            )  # The two there instead of one is intentional
+        if size <= 0:
+            raise ValueError
+
+        it = self._iter_f()
+        self._map = [None] * size
+        for node in it:
+            rec, p = self._find(node.key)
+            assert rec is None and isinstance(p, int)  # The item shouldn't be there yet
+
+            # Add to hashmap
+            m = self._map[p]
+            if m is not None and not isinstance(m, _FancyRecord):
+                raise TypeError
+            node.next_collision = m
+            self._map[p] = node
+
+    def iat(self, index: SupportsIndex) -> tuple[_KeyType, _ValueType]:
+        """Select a key value pair from a given integer.
+
+        For speed, this gets an entry from an internal list.
+        However, that list is not guaranteed to be in any particular
+        order, and can change arbitrily whenever an entry is added to
+        or removed from the mapping.
+
+        If the order of items matter, use the `iter` function instead."""
+        rec = self._by_index(index)
+        return (rec.key, rec.value)
+
     def __contains__(self, key: object) -> bool:
         if not isinstance(key, Hashable):
             return False
-        return bool(isinstance(key, Hashable) and self._find(key)[0])
+        return bool(self._find(key)[0])
 
     def __setitem__(self, key: _KeyType, value: _ValueType) -> None:
         rec, p = self._find(key)
@@ -126,18 +174,12 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
         return (key, value)
 
     def __iter__(self) -> Iterator[_KeyType]:
-        node = self._head
-        while node is not None:
-            yield node.key
-            node = node.next_ordered
+        return (x.key for x in self._iter_f())
 
     def __reversed__(self) -> Iterator[_KeyType]:
-        node = self._tail
-        while node is not None:
-            yield node.key
-            node = node.prev_ordered
+        return (x.key for x in self._iter_r())
 
-    def __deepcopy__(self, memo):
+    def __deepcopy__(self, memo) -> Self:
         new = object.__new__(type(self))
         memo[id(self)] = new
         new.__dict__.update(deepcopy(self.__dict__, memo))
@@ -154,17 +196,17 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
         new._array = new_arr
         return new
 
-    def iat(self, index: SupportsIndex) -> tuple[_KeyType, _ValueType]:
-        """Select a key value pair from a given integer.
+    def _iter_f(self) -> Iterator[_FancyRecord[_KeyType, _ValueType]]:
+        node = self._head
+        while node is not None:
+            yield node
+            node = node.next_ordered
 
-        For speed, this gets an entry from an internal list.
-        However, that list is not guaranteed to be in any particular
-        order, and can change arbitrily whenever an entry is added to
-        or removed from the mapping.
-
-        If the order of items matter, use the `iter` function instead."""
-        rec = self._by_index(index)
-        return (rec.key, rec.value)
+    def _iter_r(self) -> Iterator[_FancyRecord[_KeyType, _ValueType]]:
+        node = self._tail
+        while node is not None:
+            yield node
+            node = node.prev_ordered
 
     def _find(
         self, key: Hashable
