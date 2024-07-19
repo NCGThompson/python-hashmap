@@ -1,13 +1,13 @@
-import weakref
+import random
 from collections.abc import Hashable
-from copy import deepcopy
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Iterator, Reversible, Self, SupportsIndex
 
 from simple_map import SimpleHashmap, _SimpleRecord
 
 
-@dataclass(slots=True, weakref_slot=True)
+@dataclass(slots=True)
 class _FancyRecord[_KeyType: Hashable, _ValueType](_SimpleRecord[_KeyType, _ValueType]):
     next_ordered: Self | None = None
     prev_ordered: Self | None = None
@@ -19,7 +19,7 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
 ):
     _head: _FancyRecord[_KeyType, _ValueType] | None
     _tail: _FancyRecord[_KeyType, _ValueType] | None
-    _array: list[weakref.ref[_FancyRecord[_KeyType, _ValueType]]]
+    _array: list[_FancyRecord[_KeyType, _ValueType]]
     # FIXME: Safely make _map covariant
 
     def __init__(self, size: int | None = None) -> None:
@@ -61,7 +61,7 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
         self._tail = node
 
         # Add to array
-        self._array.append(weakref.ref(node))
+        self._array.append(node)
         node.l_index = self._count
 
         self._count += 1
@@ -95,11 +95,46 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
         a = self._array  # just to save letters
         i = rec.l_index
         assert isinstance(i, int)
-        self._by_index(-1).l_index, rec.l_index = i, len(a) - 1
+        a[-1].l_index, rec.l_index = i, len(a) - 1
         a[-1], a[i] = a[i], a[-1]
         a.pop()
 
         self._count -= 1
+
+    def choice(
+        self, generator: random.Random | None = None
+    ) -> tuple[_KeyType, _ValueType]:
+        """
+        Return a random key value pair.
+
+        This is similar to random.choice().
+        """
+        g = generator if generator is not None else random
+        rec = g.choice(self._array)
+        return (rec.key, rec.value)
+
+    def shuffle(self, generator: random.Random | None = None) -> None:
+        """
+        Reorder the entries of the dictionary.
+
+        This effects the output of iter(self). It is similar to random.shuffle().
+        """
+
+        g = generator if generator is not None else random
+        g.shuffle(self._array)
+        if self._count == 0:
+            return
+
+        self._head = self._array[0]
+        self._head.l_index = 0
+        self._tail = self._array[-1]
+        for i, j in pairwise(range(self._count)):
+            a = self._array[i]
+            b = self._array[j]
+
+            b.l_index = j
+            a.next_ordered = b
+            b.prev_ordered = a
 
     def clear(self) -> None:
         self._map.clear()
@@ -139,33 +174,18 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
             yield node.key
             node = node.prev_ordered
 
-    def __deepcopy__(self, memo):
-        new = object.__new__(type(self))
-        memo[id(self)] = new
-        new.__dict__.update(deepcopy(self.__dict__, memo))
-
-        new_arr = []
-        node = new._head
-        i = 0
-        while node is not None:
-            new_arr.append(weakref.ref(node))
-            node.l_index = i
-            node = node.next_ordered
-            i += 1
-
-        new._array = new_arr
-        return new
-
     def iat(self, index: SupportsIndex) -> tuple[_KeyType, _ValueType]:
-        """Select a key value pair from a given integer.
+        """
+        Select a key value pair from a given integer.
 
         For speed, this gets an entry from an internal list.
         However, that list is not guaranteed to be in any particular
         order, and can change arbitrily whenever an entry is added to
         or removed from the mapping.
 
-        If the order of items matter, use the `iter` function instead."""
-        rec = self._by_index(index)
+        If the order of items matter, use the `iter` function instead.
+        """
+        rec = self._array[index]
         return (rec.key, rec.value)
 
     def _find(
@@ -180,9 +200,3 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
         if not isinstance(b, (_FancyRecord, int)):
             raise TypeError
         return (a, b)
-
-    def _by_index(self, index: SupportsIndex) -> _FancyRecord[_KeyType, _ValueType]:
-        rec = self._array[index]()
-        if rec is None:
-            raise ReferenceError
-        return rec
