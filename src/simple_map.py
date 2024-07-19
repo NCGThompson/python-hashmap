@@ -1,16 +1,13 @@
 from collections.abc import Hashable, MutableMapping
+from dataclasses import dataclass
 from typing import Iterator, Self
 
 
+@dataclass(slots=True)
 class _SimpleRecord[_KeyType: Hashable, _ValueType]:
     key: _KeyType
     value: _ValueType
-    next_collision: Self | None
-
-    def __init__(self, key: _KeyType, value: _ValueType) -> None:
-        self.key = key
-        self.value = value
-        self.next_collision = None
+    next_collision: Self | None = None
 
     def find(self, key: Hashable) -> tuple[Self, Self | None] | None:
         """
@@ -30,9 +27,6 @@ class _SimpleRecord[_KeyType: Hashable, _ValueType]:
             record = record.next_collision
 
         return None
-
-    def __str__(self) -> str:
-        return f"{self.key} : {self.value} [{self.next_collision}]"
 
 
 class SimpleHashmap[_KeyType: Hashable, _ValueType](

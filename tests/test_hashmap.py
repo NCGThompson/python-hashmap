@@ -66,10 +66,12 @@ def t_hashmap(m: sm.SimpleHashmap[str, str]):
     for i, _ in test_data[:5]:
         with pytest.raises(KeyError):
             v = m[i]
+        with pytest.raises(KeyError):
+            del m[i]
     for i, v in test_data[5:]:
         assert m[i] == v
 
-    for i, _ in test_data:
+    for i, _ in test_data[5:]:
         del m[i]
     assert len(m) == 0
     assert m._map == [None, None, None, None, None]

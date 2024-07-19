@@ -1,20 +1,17 @@
 import weakref
 from collections.abc import Hashable
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Iterator, Reversible, Self, SupportsIndex
 
 from simple_map import SimpleHashmap, _SimpleRecord
 
 
+@dataclass(slots=True, weakref_slot=True)
 class _FancyRecord[_KeyType: Hashable, _ValueType](_SimpleRecord[_KeyType, _ValueType]):
-    next_ordered: Self | None
-    prev_ordered: Self | None
-    l_index: int | None
-
-    def __init__(self, key: _KeyType, value: _ValueType) -> None:
-        super().__init__(key, value)
-        self.next_ordered = None
-        self.prev_ordered = None
+    next_ordered: Self | None = None
+    prev_ordered: Self | None = None
+    l_index: int | None = None
 
 
 class FancyHashmap[_KeyType: Hashable, _ValueType](
@@ -98,6 +95,7 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
         a = self._array  # just to save letters
         i = rec.l_index
         assert isinstance(i, int)
+        self._by_index(-1).l_index, rec.l_index = i, len(a) - 1
         a[-1], a[i] = a[i], a[-1]
         a.pop()
 
@@ -126,8 +124,12 @@ class FancyHashmap[_KeyType: Hashable, _ValueType](
         return (key, value)
 
     def __iter__(self) -> Iterator[_KeyType]:
+        size = self._count
         node = self._head
-        while node is not None:
+        for _ in range(size):
+            if node is None or self._count != size:
+                message = "dictionary changed size during iteration"
+                raise RuntimeError(message)
             yield node.key
             node = node.next_ordered
 
